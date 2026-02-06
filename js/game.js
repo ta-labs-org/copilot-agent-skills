@@ -32,7 +32,7 @@ class Ball {
         this.dy = dy;
     }
 
-    update(paddle, blocks) {
+    update(paddle, blocks, game) {
         this.x += this.dx;
         this.y += this.dy;
 
@@ -57,12 +57,13 @@ class Ball {
                 this.y + this.radius > block.y && this.y - this.radius < block.y + block.height) {
                 block.destroyed = true;
                 this.dy = -this.dy;
-                // スコア加算（後で）
+                game.score += 10;
             }
         });
 
-        // 下に落ちたらリセット（後でライフ減らす）
+        // 下に落ちたらリセット（ライフ減らす）
         if (this.y > 600) {
+            game.lives--;
             this.reset();
         }
     }
@@ -112,6 +113,7 @@ class Game {
         this.ball = new Ball(400, 300, 10, 3, 3);
         this.blocks = this.createBlocks();
         this.score = 0;
+        this.lives = 3;
         this.keys = {};
         this.initEventListeners();
     }
@@ -161,6 +163,7 @@ class Game {
 
         this.update();
         this.render();
+        this.updateUI();
 
         requestAnimationFrame(() => this.gameLoop());
     }
@@ -173,7 +176,7 @@ class Game {
         this.paddle.update();
 
         // ボールの移動
-        this.ball.update(this.paddle, this.blocks);
+        this.ball.update(this.paddle, this.blocks, this);
     }
 
     render() {
@@ -185,6 +188,11 @@ class Game {
         this.ball.render(this.ctx);
         // ブロックを描画
         this.blocks.forEach(block => block.render(this.ctx));
+    }
+
+    updateUI() {
+        document.getElementById('score').textContent = `スコア: ${this.score}`;
+        document.getElementById('lives').textContent = `ライフ: ${this.lives}`;
     }
 }
 
