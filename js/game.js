@@ -32,7 +32,7 @@ class Ball {
         this.dy = dy;
     }
 
-    update(paddle) {
+    update(paddle, blocks) {
         this.x += this.dx;
         this.y += this.dy;
 
@@ -49,6 +49,17 @@ class Ball {
             this.x > paddle.x && this.x < paddle.x + paddle.width) {
             this.dy = -this.dy;
         }
+
+        // ブロックとの当たり判定
+        blocks.forEach(block => {
+            if (!block.destroyed &&
+                this.x + this.radius > block.x && this.x - this.radius < block.x + block.width &&
+                this.y + this.radius > block.y && this.y - this.radius < block.y + block.height) {
+                block.destroyed = true;
+                this.dy = -this.dy;
+                // スコア加算（後で）
+            }
+        });
 
         // 下に落ちたらリセット（後でライフ減らす）
         if (this.y > 600) {
@@ -72,6 +83,24 @@ class Ball {
     }
 }
 
+class Block {
+    constructor(x, y, width, height, color) {
+        this.x = x;
+        this.y = y;
+        this.width = width;
+        this.height = height;
+        this.color = color;
+        this.destroyed = false;
+    }
+
+    render(ctx) {
+        if (!this.destroyed) {
+            ctx.fillStyle = this.color;
+            ctx.fillRect(this.x, this.y, this.width, this.height);
+        }
+    }
+}
+
 class Game {
     constructor() {
         this.canvas = document.getElementById('game-canvas');
@@ -81,8 +110,32 @@ class Game {
         this.isRunning = false;
         this.paddle = new Paddle(350, 550, 100, 20, 5);
         this.ball = new Ball(400, 300, 10, 3, 3);
+        this.blocks = this.createBlocks();
+        this.score = 0;
         this.keys = {};
         this.initEventListeners();
+    }
+
+    createBlocks() {
+        const blocks = [];
+        const rows = 5;
+        const cols = 10;
+        const blockWidth = 70;
+        const blockHeight = 20;
+        const padding = 5;
+        const offsetX = 35;
+        const offsetY = 50;
+        const colors = ['#ff0000', '#ff8000', '#ffff00', '#00ff00', '#0000ff'];
+
+        for (let r = 0; r < rows; r++) {
+            for (let c = 0; c < cols; c++) {
+                const x = c * (blockWidth + padding) + offsetX;
+                const y = r * (blockHeight + padding) + offsetY;
+                const color = colors[r % colors.length];
+                blocks.push(new Block(x, y, blockWidth, blockHeight, color));
+            }
+        }
+        return blocks;
     }
 
     initEventListeners() {
@@ -120,7 +173,7 @@ class Game {
         this.paddle.update();
 
         // ボールの移動
-        this.ball.update(this.paddle);
+        this.ball.update(this.paddle, this.blocks);
     }
 
     render() {
@@ -130,6 +183,8 @@ class Game {
         this.paddle.render(this.ctx);
         // ボールを描画
         this.ball.render(this.ctx);
+        // ブロックを描画
+        this.blocks.forEach(block => block.render(this.ctx));
     }
 }
 

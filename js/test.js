@@ -47,16 +47,28 @@ function testBallInitialization() {
     }
 }
 
+// テスト5: ブロッククラスの初期化
+function testBlockInitialization() {
+    if (typeof Block !== 'undefined') {
+        console.log('✓ Blockクラスが定義されています');
+        return true;
+    } else {
+        console.log('✗ Blockクラスが定義されていません');
+        return false;
+    }
+}
+
 // テスト実行
 function runTests() {
     console.log('テストを開始します...');
     let passed = 0;
-    let total = 4;
+    let total = 5;
 
     if (testCanvasElement()) passed++;
     if (testGameInitialization()) passed++;
     if (testPaddleInitialization()) passed++;
     if (testBallInitialization()) passed++;
+    if (testBlockInitialization()) passed++;
 
     console.log(`テスト結果: ${passed}/${total} 通過`);
     return passed === total;
