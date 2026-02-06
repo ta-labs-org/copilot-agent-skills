@@ -661,11 +661,13 @@
             }
         });
 
+        // キャッシュされたcanvasの境界情報
+        let canvasRect = canvas.getBoundingClientRect();
+        let canvasScaleX = canvas.width / canvasRect.width;
+
         // マウス操作
         canvas.addEventListener('mousemove', (e) => {
-            const rect = canvas.getBoundingClientRect();
-            const scaleX = canvas.width / rect.width;
-            const mouseX = (e.clientX - rect.left) * scaleX;
+            const mouseX = (e.clientX - canvasRect.left) * canvasScaleX;
             paddle.x = mouseX - paddle.width / 2;
 
             if (paddle.x < 0) paddle.x = 0;
@@ -680,10 +682,9 @@
 
         // タッチ操作（スマートフォン対応）
         canvas.addEventListener('touchmove', (e) => {
-            const rect = canvas.getBoundingClientRect();
-            const scaleX = canvas.width / rect.width;
+            e.preventDefault();
             const touch = e.touches[0];
-            const touchX = (touch.clientX - rect.left) * scaleX;
+            const touchX = (touch.clientX - canvasRect.left) * canvasScaleX;
             paddle.x = touchX - paddle.width / 2;
 
             if (paddle.x < 0) paddle.x = 0;
@@ -693,6 +694,7 @@
         });
 
         canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault();
             launchBall();
         });
 
@@ -701,6 +703,9 @@
             const container = canvas.parentElement;
             const maxWidth = Math.min(800, container.clientWidth - 40);
             canvas.style.width = maxWidth + 'px';
+            // Canvas境界情報を更新
+            canvasRect = canvas.getBoundingClientRect();
+            canvasScaleX = canvas.width / canvasRect.width;
         }
 
         window.addEventListener('resize', resizeCanvas);
