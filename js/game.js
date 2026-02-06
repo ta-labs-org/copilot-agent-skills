@@ -148,6 +148,19 @@ class Game {
         document.addEventListener('keyup', (e) => {
             this.keys[e.code] = false;
         });
+        window.addEventListener('resize', () => this.resizeCanvas());
+    }
+
+    resizeCanvas() {
+        const container = document.getElementById('game-container');
+        this.canvas.width = container.clientWidth;
+        this.canvas.height = container.clientHeight;
+        this.width = this.canvas.width;
+        this.height = this.canvas.height;
+        // 位置調整（簡易）
+        this.paddle.y = this.height - 50;
+        this.blocks = this.createBlocks();
+        this.ball.reset();
     }
 
     start() {
