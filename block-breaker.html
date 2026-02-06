@@ -52,6 +52,7 @@
             max-width: 100%;
             height: auto;
             cursor: none;
+            touch-action: none;
         }
 
         .controls {
@@ -164,9 +165,9 @@
         </div>
 
         <div class="level-selector">
-            <button class="button level-button active" onclick="selectLevel(1)">レベル 1</button>
-            <button class="button level-button" onclick="selectLevel(2)">レベル 2</button>
-            <button class="button level-button" onclick="selectLevel(3)">レベル 3</button>
+            <button class="button level-button active" onclick="selectLevel(1, event)">レベル 1</button>
+            <button class="button level-button" onclick="selectLevel(2, event)">レベル 2</button>
+            <button class="button level-button" onclick="selectLevel(3, event)">レベル 3</button>
         </div>
 
         <button class="button" onclick="resetGame()">🔄 リスタート</button>
@@ -256,9 +257,16 @@
         };
 
         // 効果音を生成（Web Audio API）
-        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        let audioContext = null;
+
+        function initAudioContext() {
+            if (!audioContext) {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            }
+        }
 
         function playSound(frequency, duration, type = 'sine') {
+            initAudioContext();
             const oscillator = audioContext.createOscillator();
             const gainNode = audioContext.createGain();
             
@@ -576,14 +584,16 @@
         }
 
         // レベルを選択
-        function selectLevel(level) {
+        function selectLevel(level, event) {
             gameState.level = level;
             updateLevel();
             
             document.querySelectorAll('.level-button').forEach(btn => {
                 btn.classList.remove('active');
             });
-            event.target.classList.add('active');
+            if (event && event.target) {
+                event.target.classList.add('active');
+            }
             
             resetGame();
         }
@@ -601,6 +611,9 @@
 
         // ゲームを開始
         function startGame() {
+            if (gameState.animationId) {
+                cancelAnimationFrame(gameState.animationId);
+            }
             gameState.isPlaying = true;
             createBricks();
             resetBall();
@@ -610,7 +623,10 @@
 
         // ゲームループ
         function gameLoop() {
-            if (!gameState.isPlaying) return;
+            if (!gameState.isPlaying) {
+                gameState.animationId = null;
+                return;
+            }
 
             drawBackground();
             drawBricks();
@@ -623,7 +639,7 @@
             detectCollision();
             checkLevelComplete();
 
-            requestAnimationFrame(gameLoop);
+            gameState.animationId = requestAnimationFrame(gameLoop);
         }
 
         // キーボード操作
@@ -664,7 +680,6 @@
 
         // タッチ操作（スマートフォン対応）
         canvas.addEventListener('touchmove', (e) => {
-            e.preventDefault();
             const rect = canvas.getBoundingClientRect();
             const scaleX = canvas.width / rect.width;
             const touch = e.touches[0];
@@ -678,7 +693,6 @@
         });
 
         canvas.addEventListener('touchstart', (e) => {
-            e.preventDefault();
             launchBall();
         });
 
