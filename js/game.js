@@ -144,11 +144,22 @@ class Game {
     initEventListeners() {
         document.addEventListener('keydown', (e) => {
             this.keys[e.code] = true;
+            if (e.code === 'Space') {
+                e.preventDefault();
+                this.togglePause();
+            }
         });
         document.addEventListener('keyup', (e) => {
             this.keys[e.code] = false;
         });
         window.addEventListener('resize', () => this.resizeCanvas());
+    }
+
+    togglePause() {
+        this.isRunning = !this.isRunning;
+        if (this.isRunning) {
+            this.gameLoop();
+        }
     }
 
     resizeCanvas() {
