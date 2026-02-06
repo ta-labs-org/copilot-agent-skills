@@ -114,6 +114,7 @@ class Game {
         this.blocks = this.createBlocks();
         this.score = 0;
         this.lives = 3;
+        this.level = 1;
         this.keys = {};
         this.initEventListeners();
     }
@@ -177,6 +178,19 @@ class Game {
 
         // ボールの移動
         this.ball.update(this.paddle, this.blocks, this);
+
+        // レベルクリア判定
+        if (this.blocks.every(block => block.destroyed)) {
+            this.nextLevel();
+        }
+    }
+
+    nextLevel() {
+        this.level++;
+        this.blocks = this.createBlocks();
+        this.ball.dx += 0.5;
+        this.ball.dy += 0.5;
+        this.ball.reset();
     }
 
     render() {
