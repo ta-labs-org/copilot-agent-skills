@@ -29,6 +29,11 @@ body {
     font-size: 18px;
 }
 
-#score, #lives {
+#score, #lives, #message {
     margin-bottom: 5px;
+}
+
+#message {
+    color: red;
+    font-weight: bold;
 }
