@@ -23,6 +23,55 @@ class Paddle {
     }
 }
 
+class Ball {
+    constructor(x, y, radius, dx, dy) {
+        this.x = x;
+        this.y = y;
+        this.radius = radius;
+        this.dx = dx;
+        this.dy = dy;
+    }
+
+    update(paddle) {
+        this.x += this.dx;
+        this.y += this.dy;
+
+        // 壁反射
+        if (this.x - this.radius < 0 || this.x + this.radius > 800) {
+            this.dx = -this.dx;
+        }
+        if (this.y - this.radius < 0) {
+            this.dy = -this.dy;
+        }
+
+        // パドルとの当たり判定
+        if (this.y + this.radius > paddle.y && this.y - this.radius < paddle.y + paddle.height &&
+            this.x > paddle.x && this.x < paddle.x + paddle.width) {
+            this.dy = -this.dy;
+        }
+
+        // 下に落ちたらリセット（後でライフ減らす）
+        if (this.y > 600) {
+            this.reset();
+        }
+    }
+
+    reset() {
+        this.x = 400;
+        this.y = 300;
+        this.dx = 3;
+        this.dy = 3;
+    }
+
+    render(ctx) {
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.fillStyle = '#f00';
+        ctx.fill();
+        ctx.closePath();
+    }
+}
+
 class Game {
     constructor() {
         this.canvas = document.getElementById('game-canvas');
@@ -31,6 +80,7 @@ class Game {
         this.height = this.canvas.height;
         this.isRunning = false;
         this.paddle = new Paddle(350, 550, 100, 20, 5);
+        this.ball = new Ball(400, 300, 10, 3, 3);
         this.keys = {};
         this.initEventListeners();
     }
@@ -68,6 +118,9 @@ class Game {
         if (this.keys['ArrowLeft']) this.paddle.dx = -this.paddle.speed;
         if (this.keys['ArrowRight']) this.paddle.dx = this.paddle.speed;
         this.paddle.update();
+
+        // ボールの移動
+        this.ball.update(this.paddle);
     }
 
     render() {
@@ -75,6 +128,8 @@ class Game {
         this.ctx.clearRect(0, 0, this.width, this.height);
         // パドルを描画
         this.paddle.render(this.ctx);
+        // ボールを描画
+        this.ball.render(this.ctx);
     }
 }
 

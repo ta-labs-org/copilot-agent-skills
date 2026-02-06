@@ -36,15 +36,27 @@ function testPaddleInitialization() {
     }
 }
 
+// テスト4: ボールクラスの初期化
+function testBallInitialization() {
+    if (typeof Ball !== 'undefined') {
+        console.log('✓ Ballクラスが定義されています');
+        return true;
+    } else {
+        console.log('✗ Ballクラスが定義されていません');
+        return false;
+    }
+}
+
 // テスト実行
 function runTests() {
     console.log('テストを開始します...');
     let passed = 0;
-    let total = 3;
+    let total = 4;
 
     if (testCanvasElement()) passed++;
     if (testGameInitialization()) passed++;
     if (testPaddleInitialization()) passed++;
+    if (testBallInitialization()) passed++;
 
     console.log(`テスト結果: ${passed}/${total} 通過`);
     return passed === total;
