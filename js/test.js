@@ -25,14 +25,26 @@ function testGameInitialization() {
     }
 }
 
+// テスト3: パドルクラスの初期化
+function testPaddleInitialization() {
+    if (typeof Paddle !== 'undefined') {
+        console.log('✓ Paddleクラスが定義されています');
+        return true;
+    } else {
+        console.log('✗ Paddleクラスが定義されていません');
+        return false;
+    }
+}
+
 // テスト実行
 function runTests() {
     console.log('テストを開始します...');
     let passed = 0;
-    let total = 2;
+    let total = 3;
 
     if (testCanvasElement()) passed++;
     if (testGameInitialization()) passed++;
+    if (testPaddleInitialization()) passed++;
 
     console.log(`テスト結果: ${passed}/${total} 通過`);
     return passed === total;
