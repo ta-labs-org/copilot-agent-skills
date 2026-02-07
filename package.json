@@ -1,0 +1,31 @@
+{
+  "name": "copilot-agent-janken",
+  "version": "1.0.0",
+  "description": "Simple janken (rock-paper-scissors) CLI for tests",
+  "main": "src/cli.js",
+  "bin": {
+    "janken": "bin/janken.js"
+  },
+  "scripts": {
+    "start": "node ./bin/janken.js",
+    "test": "jest"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "jest": "^29.0.0"
+  }
+}
+{
+  "name": "block-breaker-game",
+  "version": "1.0.0",
+  "description": "A simple block breaker game",
+  "main": "js/game.js",
+  "scripts": {
+    "test": "node test-puppeteer.js"
+  },
+  "dependencies": {
+    "puppeteer": "^21.0.0"
+  }
+}

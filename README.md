@@ -1,3 +1,26 @@
+# Janken CLI
+
+シンプルなジャンケン（グー/チョキ/パー）CLI とテスト。
+
+インストール・実行:
+
+1. 依存をインストール
+
+```bash
+npm install
+```
+
+2. CLI 実行
+
+```bash
+npm start
+```
+
+3. テスト実行
+
+```bash
+npm test
+```
 # copilot-agent-skills
 
 ## ブロック崩しゲーム

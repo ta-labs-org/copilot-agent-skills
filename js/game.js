@@ -178,6 +178,9 @@ class Game {
     constructor() {
         this.canvas = document.getElementById('game-canvas');
         this.ctx = this.canvas.getContext('2d');
+        // Canvasのサイズを設定
+        this.canvas.width = CANVAS_WIDTH;
+        this.canvas.height = CANVAS_HEIGHT;
         this.width = this.canvas.width;
         this.height = this.canvas.height;
         this.isRunning = false;
