@@ -65,3 +65,15 @@ npm test
 - JavaScript ES6クラス。
 - TDD（テスト駆動開発）で実装。
 - 定数変数化、コメント追加。
+
+### パワーアップ (Powerups)
+
+- ドロップ確率: デフォルト 10%（`dropProbability` 設定で変更可）
+- 種類: `speed` (パドル速度アップ), `multiball` (追加ボール), `expand` (パドル拡大), `pistol` (パドルが銃を使用可能)
+- 効果時間: `speed`/`expand` は 10000ms、`pistol` は 8000ms、`multiball` は即時効果
+- providers: 外部から注入可能な `providers` を使用
+	- `rng`: 乱数生成関数 () => number(0..1)
+	- `timer`: { setTimeout, clearTimeout }
+	- `logger`: { info }
+
+実装ファイル: `js/powerups.js`。ゲームは `Game` に providers を注入してテストでモックできるようになっている。

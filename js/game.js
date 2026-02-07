@@ -124,17 +124,18 @@ class Ball {
                     if (ballCenterY < blockTop) this.y -= overlapY;
                     else this.y += overlapY;
                 }
-                game.score += SCORE_PER_BLOCK;
+                if (game && typeof game.onBlockDestroyed === 'function') {
+                    game.onBlockDestroyed(block);
+                } else if (game) {
+                    game.score += SCORE_PER_BLOCK;
+                }
             }
         });
 
-        // 下に落ちたらリセット（ライフ減らす）
+        // 下に落ちたらゲームに委譲
         if (this.y > CANVAS_HEIGHT) {
-            game.lives--;
-            if (game.lives <= 0) {
-                game.gameOver();
-            } else {
-                this.reset();
+            if (game && typeof game.onBallLost === 'function') {
+                game.onBallLost(this);
             }
         }
     }
@@ -175,7 +176,13 @@ class Block {
 }
 
 class Game {
-    constructor() {
+    constructor(providers, config) {
+        this.providers = providers || {};
+        this.providers.rng = this.providers.rng || Math.random;
+        this.providers.timer = this.providers.timer || { setTimeout: setTimeout, clearTimeout: clearTimeout };
+        this.providers.logger = this.providers.logger || { info: function(){} };
+        this.config = Object.assign({ dropProbability: 0.1 }, config || {});
+
         this.canvas = document.getElementById('game-canvas');
         this.ctx = this.canvas.getContext('2d');
         // Canvasのサイズを設定
@@ -186,7 +193,16 @@ class Game {
         this.isRunning = false;
         this.paddle = new Paddle(350, 550, PADDLE_WIDTH, PADDLE_HEIGHT, PADDLE_SPEED);
         this.ball = new Ball(CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2, BALL_RADIUS, BALL_SPEED_X, BALL_SPEED_Y);
+        // support multiple balls
+        this.balls = [this.ball];
         this.blocks = this.createBlocks();
+        // powerups
+        try {
+            const PowerupsManager = (typeof require === 'function') ? require('./powerups') : window.PowerupsManager;
+            this.powerups = new PowerupsManager(this.providers, { dropProbability: this.config.dropProbability });
+        } catch (e) {
+            this.powerups = null;
+        }
         this.score = 0;
         this.lives = INITIAL_LIVES;
         this.level = 1;
@@ -283,8 +299,11 @@ class Game {
         if (this.keys['ArrowRight']) this.paddle.dx = this.paddle.speed;
         this.paddle.update();
 
-        // ボールの移動
-        this.ball.update(this.paddle, this.blocks, this);
+        // ボールの移動（複数対応）
+        this.balls.forEach(b => b.update(this.paddle, this.blocks, this));
+
+        // powerups 更新
+        if (this.powerups) this.powerups.update(this);
 
         // レベルクリア判定
         if (this.blocks.every(block => block.destroyed)) {
@@ -295,9 +314,8 @@ class Game {
     nextLevel() {
         this.level++;
         this.blocks = this.createBlocks();
-        this.ball.dx += 0.5;
-        this.ball.dy += 0.5;
-        this.ball.reset();
+        // speed up existing balls slightly
+        this.balls.forEach(b => { b.dx += 0.5; b.dy += 0.5; b.reset(); });
     }
 
     render() {
@@ -306,7 +324,7 @@ class Game {
         // パドルを描画
         this.paddle.render(this.ctx);
         // ボールを描画
-        this.ball.render(this.ctx);
+        this.balls.forEach(b => b.render(this.ctx));
         // ブロックを描画
         this.blocks.forEach(block => block.render(this.ctx));
     }
@@ -314,6 +332,39 @@ class Game {
     updateUI() {
         document.getElementById('score').textContent = `スコア: ${this.score}`;
         document.getElementById('lives').textContent = `ライフ: ${this.lives}`;
+    }
+
+    onBlockDestroyed(block) {
+        this.score += SCORE_PER_BLOCK;
+        // spawn powerup at block center
+        if (this.powerups) {
+            const bx = block.x + block.width / 2 - 12;
+            const by = block.y + block.height / 2 - 12;
+            this.powerups.spawn(bx, by);
+        }
+    }
+
+    onBallLost(ball) {
+        // remove this ball from active balls
+        const idx = this.balls.indexOf(ball);
+        if (idx !== -1) this.balls.splice(idx, 1);
+        // if none left, lose a life and reset main ball
+        if (this.balls.length === 0) {
+            this.lives--;
+            if (this.lives <= 0) {
+                this.gameOver();
+            } else {
+                // reset main ball and add back
+                this.ball.reset();
+                this.balls = [this.ball];
+            }
+        }
+    }
+
+    spawnExtraBall() {
+        // duplicate main ball with mirrored velocities
+        const b = new Ball(this.ball.x, this.ball.y, this.ball.radius, -this.ball.dx || BALL_SPEED_X, -this.ball.dy || BALL_SPEED_Y);
+        this.balls.push(b);
     }
 }
 
