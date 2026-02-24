@@ -58,8 +58,8 @@ class Ball {
         this.y += this.dy;
 
         // 壁反射
-        const canvasWidth = (game && game.width) ? game.width : CANVAS_WIDTH;
-        const canvasHeight = (game && game.height) ? game.height : CANVAS_HEIGHT;
+        const canvasWidth = (game && game.width !== undefined) ? game.width : CANVAS_WIDTH;
+        const canvasHeight = (game && game.height !== undefined) ? game.height : CANVAS_HEIGHT;
         if (this.x - this.radius < 0 || this.x + this.radius > canvasWidth) {
             this.dx = -this.dx;
         }
