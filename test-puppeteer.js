@@ -3,14 +3,15 @@ const puppeteer = require('puppeteer');
 async function runTests() {
     const browser = await puppeteer.launch({ headless: false }); // ヘッドレスオフでブラウザ表示
     const page = await browser.newPage();
-    await page.goto('http://localhost:8000/index.html');
-
-    // テスト実行を待つ
-    await page.waitForTimeout(2000);
 
     // コンソールログを取得
     const logs = [];
     page.on('console', msg => logs.push(msg.text()));
+
+    await page.goto('http://localhost:8000/index.html');
+
+    // テスト実行を待つ
+    await page.waitForTimeout(2000);
 
     // テスト関数を実行
     await page.evaluate(() => {
