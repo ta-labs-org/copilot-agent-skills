@@ -1,4 +1,10 @@
-# Janken CLI
+# copilot-agent-skills
+
+このリポジトリには 2 つの独立した機能が含まれています。
+
+---
+
+## Janken CLI
 
 シンプルなジャンケン（グー/チョキ/パー）CLI とテスト。
 
@@ -21,7 +27,8 @@ npm start
 ```bash
 npm test
 ```
-# copilot-agent-skills
+
+---
 
 ## ブロック崩しゲーム
 
