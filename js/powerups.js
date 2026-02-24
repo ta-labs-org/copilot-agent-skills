@@ -110,7 +110,7 @@
             meta.orig = (game && game.paddle && typeof game.paddle.width === 'number') ? game.paddle.width : undefined;
             game.paddle && (game.paddle.width = Math.floor((game.paddle.width || 100) * 1.5));
         } else if (type === 'pistol') {
-            meta.orig = false;
+            meta.orig = (game && game.paddle && typeof game.paddle.pistol === 'boolean') ? game.paddle.pistol : undefined;
             game.paddle && (game.paddle.pistol = true);
         }
 
