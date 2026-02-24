@@ -30,11 +30,12 @@ class Paddle {
         this.dx = 0; // 移動方向
     }
 
-    update() {
+    update(canvasWidth) {
+        canvasWidth = canvasWidth || CANVAS_WIDTH;
         this.x += this.dx;
         // 画面外に出ないように制限
         if (this.x < 0) this.x = 0;
-        if (this.x + this.width > CANVAS_WIDTH) this.x = CANVAS_WIDTH - this.width;
+        if (this.x + this.width > canvasWidth) this.x = canvasWidth - this.width;
     }
 
     render(ctx) {
@@ -57,7 +58,9 @@ class Ball {
         this.y += this.dy;
 
         // 壁反射
-        if (this.x - this.radius < 0 || this.x + this.radius > CANVAS_WIDTH) {
+        const canvasWidth = (game && game.width) ? game.width : CANVAS_WIDTH;
+        const canvasHeight = (game && game.height) ? game.height : CANVAS_HEIGHT;
+        if (this.x - this.radius < 0 || this.x + this.radius > canvasWidth) {
             this.dx = -this.dx;
         }
         if (this.y - this.radius < 0) {
@@ -133,7 +136,7 @@ class Ball {
         });
 
         // 下に落ちたらゲームに委譲
-        if (this.y > CANVAS_HEIGHT) {
+        if (this.y > canvasHeight) {
             if (game && typeof game.onBallLost === 'function') {
                 game.onBallLost(this);
             }
@@ -297,7 +300,7 @@ class Game {
         this.paddle.dx = 0;
         if (this.keys['ArrowLeft']) this.paddle.dx = -this.paddle.speed;
         if (this.keys['ArrowRight']) this.paddle.dx = this.paddle.speed;
-        this.paddle.update();
+        this.paddle.update(this.width);
 
         // ボールの移動（複数対応）
         this.balls.forEach(b => b.update(this.paddle, this.blocks, this));
