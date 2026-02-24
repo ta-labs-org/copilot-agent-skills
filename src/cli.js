@@ -6,7 +6,11 @@ async function runCli(argv = [], options = {}) {
   const stdin = options.stdin || process.stdin;
   const stdout = options.stdout || process.stdout;
 
-  const rl = readline.createInterface({ input: stdin, output: stdout, terminal: true });
+  const rl = readline.createInterface({
+    input: stdin,
+    output: stdout,
+    terminal: typeof options.terminal === 'boolean' ? options.terminal : Boolean(stdin.isTTY),
+  });
   const rng = options.rng || createRng();
   const state = createGameState();
 

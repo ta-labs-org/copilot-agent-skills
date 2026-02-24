@@ -53,12 +53,10 @@ denied: requested access to the resource is denied
 ```
 
 **Solutions:**
-1. Verify ACR admin credentials enabled:
-   ```bicep
-   properties: {
-     adminUserEnabled: true
-   }
-   ```
+1. Verify that the identity used to push images has appropriate ACR permissions (recommended):
+   - For local development, ensure your signed-in Azure user has the `AcrPush` role on the registry.
+   - For CI/CD pipelines, use a service principal with only the minimum required roles (for example, `AcrPush` for builds).
+   - For runtime workloads (such as Container Apps), use a managed identity with `AcrPull` assigned to the registry.
 
 2. Re-authenticate:
    ```bash

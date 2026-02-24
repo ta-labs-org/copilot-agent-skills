@@ -142,7 +142,7 @@ resource containerRegistry 'Microsoft.ContainerRegistry/registries@2023-07-01' =
   tags: tags
   sku: { name: 'Basic' }
   properties: {
-    adminUserEnabled: true  // Required for Container Apps pull
+    adminUserEnabled: false  // Use managed identity or service principal from Container Apps instead of admin user
   }
 }
 
@@ -239,17 +239,13 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
       }
       registries: [
         {
+          // Using managed identity for ACR authentication; no static credentials.
           server: containerRegistry.properties.loginServer
-          username: containerRegistry.listCredentials().username
-          passwordSecretRef: 'acr-password'
         }
       ]
-      secrets: [
-        {
-          name: 'acr-password'
-          value: containerRegistry.listCredentials().passwords[0].value
-        }
-      ]
+      // No ACR credentials are stored as secrets; Container Apps uses the
+      // system-assigned managed identity (configured in `identity`) which
+      // must have the AcrPull role on this registry.
     }
     template: {
       containers: [
