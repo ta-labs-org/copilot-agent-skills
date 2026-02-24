@@ -33,8 +33,12 @@ class Paddle {
     update() {
         this.x += this.dx;
         // 画面外に出ないように制限
+        const currentWidth =
+            (typeof game !== 'undefined' && game && typeof game.width === 'number')
+                ? game.width
+                : CANVAS_WIDTH;
         if (this.x < 0) this.x = 0;
-        if (this.x + this.width > CANVAS_WIDTH) this.x = CANVAS_WIDTH - this.width;
+        if (this.x + this.width > currentWidth) this.x = currentWidth - this.width;
     }
 
     render(ctx) {
