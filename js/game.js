@@ -65,7 +65,7 @@ class Ball {
         }
 
         // パドルとの当たり判定（角度変更追加）
-        if (this.y + this.radius > paddle.y && this.y - this.radius < paddle.y + paddle.height &&
+        if (paddle && this.y + this.radius > paddle.y && this.y - this.radius < paddle.y + paddle.height &&
             this.x > paddle.x && this.x < paddle.x + paddle.width) {
             // パドルの位置に基づいて角度変更
             const hitPos = (this.x - paddle.x) / paddle.width; // 0-1
@@ -327,6 +327,21 @@ class Game {
         this.balls.forEach(b => b.render(this.ctx));
         // ブロックを描画
         this.blocks.forEach(block => block.render(this.ctx));
+        // powerups を描画（存在する場合）
+        if (this.powerups && this.powerups.active && this.powerups.active.length) {
+            this.ctx.save();
+            this.powerups.active.forEach(pu => {
+                this.ctx.fillStyle = pu.type === 'multiball' ? '#FFD700' :
+                                     pu.type === 'speed' ? '#FF6B6B' :
+                                     pu.type === 'expand' ? '#6BCB77' : '#8E44AD';
+                this.ctx.fillRect(pu.x, pu.y, pu.width, pu.height);
+                this.ctx.fillStyle = '#fff';
+                this.ctx.font = '12px sans-serif';
+                const label = pu.type === 'multiball' ? 'M' : pu.type === 'speed' ? 'S' : pu.type === 'expand' ? 'E' : 'P';
+                this.ctx.fillText(label, pu.x + 6, pu.y + 16);
+            });
+            this.ctx.restore();
+        }
     }
 
     updateUI() {
