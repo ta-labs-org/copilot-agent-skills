@@ -155,19 +155,27 @@
             <div>スコア: <span id="score">0</span></div>
             <div>ライフ: <span id="lives">3</span></div>
             <div>レベル: <span id="level">1</span></div>
+            <div>コンボ: <span id="combo">0</span>x</div>
         </div>
 
         <canvas id="gameCanvas" width="800" height="600"></canvas>
 
         <div class="controls">
-            <p>⌨️ 左右矢印キーまたはマウスで操作</p>
-            <p>スペースキーでボール発射</p>
+            <p>⌨️ 左右矢印キーで操作 / スペースでボール発射 / Zでピストル</p>
+            <p>🔥 必殺技: [1] レーザー(30SP) [2] メテオ(50SP) [3] バリア(20SP)</p>
         </div>
 
         <div class="level-selector">
-            <button class="button level-button active" onclick="selectLevel(1, event)">レベル 1</button>
-            <button class="button level-button" onclick="selectLevel(2, event)">レベル 2</button>
-            <button class="button level-button" onclick="selectLevel(3, event)">レベル 3</button>
+            <button class="button level-button active" onclick="selectLevel(1, event)">1</button>
+            <button class="button level-button" onclick="selectLevel(2, event)">2</button>
+            <button class="button level-button" onclick="selectLevel(3, event)">3</button>
+            <button class="button level-button" onclick="selectLevel(4, event)">4</button>
+            <button class="button level-button" onclick="selectLevel(5, event)">5</button>
+            <button class="button level-button" onclick="selectLevel(6, event)">6</button>
+            <button class="button level-button" onclick="selectLevel(7, event)">7</button>
+            <button class="button level-button" onclick="selectLevel(8, event)">8</button>
+            <button class="button level-button" onclick="selectLevel(9, event)">9</button>
+            <button class="button level-button" onclick="selectLevel(10, event)">10</button>
         </div>
 
         <button class="button" onclick="resetGame()">🔄 リスタート</button>
@@ -186,6 +194,7 @@
         <button class="button" onclick="resetGame()">最初から</button>
     </div>
 
+    <script src="js/powerups.js"></script>
     <script>
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
@@ -200,13 +209,19 @@
             animationId: null
         };
 
-        // パドル
+        // 設定: パドルを自動で中央に戻すか (false: 戻さない)
+        let centerPaddleOnStart = false;
+
+        // パドル（自然な移動のために速度・加速度を持つ）
         const paddle = {
             width: 120,
             height: 15,
             x: canvas.width / 2 - 60,
             y: canvas.height - 30,
+            baseMaxSpeed: 8,
             speed: 8,
+            vx: 0,
+            accel: 1.6,
             dx: 0
         };
 
@@ -224,35 +239,159 @@
         const brickConfig = {
             rows: 5,
             cols: 8,
-            width: 90,
+            width: 85,
             height: 25,
             padding: 10,
             offsetTop: 60,
-            offsetLeft: 35
+            offsetLeft: 25
         };
 
         let bricks = [];
 
+        // 追加: extra balls, bullets と powerups マネージャ
+        let extraBalls = [];
+        let bullets = []; // pistol bullets
+        let lastShotTime = 0;
+        const shootCooldown = 200;
+        let powerupsManager = (typeof PowerupsManager === 'function') ? new PowerupsManager({ rng: Math.random, timer: { setTimeout, clearTimeout }, logger: console }, { dropProbability: 0.1 }) : null;
+        const gameProxy = {
+            width: canvas.width,
+            height: canvas.height,
+            paddle: paddle,
+            spawnExtraBall: function() {
+                const nb = {
+                    radius: ball.radius,
+                    x: ball.x,
+                    y: ball.y,
+                    speed: ball.speed,
+                    dx: (Math.random() * 2 - 1) * ball.speed,
+                    dy: -Math.abs(ball.speed)
+                };
+                extraBalls.push(nb);
+            }
+        };
+
+        // ============================
+        // 必殺技 (SPECIAL MOVES) システム
+        // ============================
+        const sp = {
+            current: 0,
+            max: 100,
+            gain: 3, // per brick destroyed
+            comboGain: 1 // bonus per combo level
+        };
+
+        // アクティブな必殺技エフェクト
+        let activeLaser = null; // {x, width, timer, alpha}
+        let meteors = [];       // [{x, y, vy, radius, exploded}]
+        let barrier = null;     // {y, alpha, hp}
+
+        // ============================
+        // コンボシステム
+        // ============================
+        let combo = {
+            count: 0,
+            timer: 0,
+            maxTimer: 90, // frames (~1.5s at 60fps)
+            display: { text: '', alpha: 0, x: 0, y: 0 }
+        };
+
+        // ============================
+        // 画面シェイク
+        // ============================
+        let screenShake = { intensity: 0, duration: 0 };
+
+        // ============================
+        //  ブロック攻撃システム (ENEMY FIRE)
+        // ============================
+        let enemyBullets = [];   // [{x, y, dy, radius, type}]
+        let enemyFireTimer = 0;
+        const ENEMY_FIRE_INTERVAL_BASE = 180; // frames (~3s) - decreases with level
+        let warningBricks = [];  // bricks about to fire (visual warning)
+
+        // ============================
+        // ボスブロック
+        // ============================
+        // Boss spawns on level 2+ after clearing 60% of blocks
+
         // レベルデザイン
         const levelDesigns = {
-            1: { // 基本パターン
+            1: { // 基本パターン（敵はおとなしめ）
                 colors: ['#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', '#98D8C8'],
                 pattern: (row, col) => true,
-                ballSpeed: 5
+                ballSpeed: 5,
+                enemyFireRate: 0.3,
+                bossChance: 0
             },
-            2: { // ダイヤモンドパターン
+            2: { // ダイヤモンドパターン（敵が攻撃開始）
                 colors: ['#F7DC6F', '#BB8FCE', '#85C1E2', '#F8B4D9', '#AED6F1'],
                 pattern: (row, col) => {
                     const center = 3.5;
                     const distance = Math.abs(row - 2) + Math.abs(col - center);
                     return distance <= 4;
                 },
-                ballSpeed: 6
+                ballSpeed: 6,
+                enemyFireRate: 0.7,
+                bossChance: 0.5
             },
-            3: { // チェッカーボードパターン
+            3: { // チェッカーボードパターン（激しい攻撃）
                 colors: ['#E74C3C', '#3498DB', '#2ECC71', '#F39C12', '#9B59B6'],
                 pattern: (row, col) => (row + col) % 2 === 0,
-                ballSpeed: 7
+                ballSpeed: 7,
+                enemyFireRate: 1.0,
+                bossChance: 1.0
+            },
+            4: { // ストライプパターン
+                colors: ['#FF1744', '#F50057', '#D500F9', '#651FFF', '#3D5AFE'],
+                pattern: (row, col) => col % 2 === 0,
+                ballSpeed: 7.5,
+                enemyFireRate: 1.2,
+                bossChance: 1.0
+            },
+            5: { // クロスパターン
+                colors: ['#00E676', '#1DE9B6', '#00E5FF', '#2979FF', '#3D5AFE'],
+                pattern: (row, col) => row === 2 || col === 3 || col === 4,
+                ballSpeed: 8,
+                enemyFireRate: 1.4,
+                bossChance: 1.0
+            },
+            6: { // 枠パターン
+                colors: ['#FF6D00', '#FF9100', '#FFAB00', '#FFC400', '#FFD740'],
+                pattern: (row, col) => row === 0 || row === 4 || col === 0 || col === 7,
+                ballSpeed: 8.5,
+                enemyFireRate: 1.6,
+                bossChance: 1.0
+            },
+            7: { // X字パターン
+                colors: ['#DD2C00', '#FF3D00', '#FF6E40', '#FF9E80', '#FFCCBC'],
+                pattern: (row, col) => Math.abs(row - 2) === Math.abs(col - 3.5),
+                ballSpeed: 9,
+                enemyFireRate: 1.8,
+                bossChance: 1.0
+            },
+            8: { // ランダムパターン（穴あき）
+                colors: ['#6A1B9A', '#8E24AA', '#AB47BC', '#BA68C8', '#CE93D8'],
+                pattern: (row, col) => (row * col + row + col) % 3 !== 0,
+                ballSpeed: 9.5,
+                enemyFireRate: 2.0,
+                bossChance: 1.0
+            },
+            9: { // 密集パターン（全ブロック高HP）
+                colors: ['#C62828', '#D32F2F', '#E53935', '#F44336', '#EF5350'],
+                pattern: (row, col) => true,
+                ballSpeed: 10,
+                enemyFireRate: 2.2,
+                bossChance: 1.0
+            },
+            10: { // 最終レベル：カオスパターン
+                colors: ['#000000', '#212121', '#424242', '#616161', '#757575'],
+                pattern: (row, col) => {
+                    // 複雑なパターン：すべて表示するが配置がランダム風
+                    return (row + col) % 3 !== 1;
+                },
+                ballSpeed: 11,
+                enemyFireRate: 2.5,
+                bossChance: 1.0
             }
         };
 
@@ -307,14 +446,58 @@
             setTimeout(() => playSound(783.99, 0.2, 'sine'), 200);
         }
 
-        // ブロックを初期化
+        function playEnemyFireSound() {
+            playSound(180, 0.15, 'sawtooth');
+        }
+
+        function playSpecialSound() {
+            setTimeout(() => playSound(1046.5, 0.05, 'square'), 0);
+            setTimeout(() => playSound(1318.5, 0.05, 'square'), 50);
+            setTimeout(() => playSound(1568.0, 0.15, 'square'), 100);
+        }
+
+        function playMeteorSound() {
+            playSound(100, 0.4, 'sawtooth');
+        }
+
+        function playBarrierSound() {
+            playSound(440, 0.2, 'triangle');
+        }
+
+        function playHitSound() {
+            playSound(300, 0.05, 'square');
+        }
+
+        function playComboSound(level) {
+            const freq = 400 + level * 80;
+            playSound(Math.min(freq, 1200), 0.08, 'sine');
+        }
+
+        // ブロックを初期化（HP を持つブロックを作成 + ボスブロック）
+        let bossBlock = null;
+        let bossSpawned = false;
+        let totalBricksAtStart = 0;
+
         function createBricks() {
             bricks = [];
+            bossBlock = null;
+            bossSpawned = false;
+            enemyBullets = [];
+            enemyFireTimer = 0;
+            warningBricks = [];
             const design = levelDesigns[gameState.level] || levelDesigns[1];
             
             for (let row = 0; row < brickConfig.rows; row++) {
                 for (let col = 0; col < brickConfig.cols; col++) {
                     if (design.pattern(row, col)) {
+                        let hits = 1;
+                        const rand = Math.random();
+                        // 高レベルではHPが高いブロックが増える
+                        const hpBoost = Math.floor(gameState.level / 3);
+                        if (rand < 0.08) hits = 3 + hpBoost;
+                        else if (rand < 0.26) hits = 2 + hpBoost;
+                        else if (gameState.level >= 9) hits = 1 + hpBoost;
+
                         bricks.push({
                             x: col * (brickConfig.width + brickConfig.padding) + brickConfig.offsetLeft,
                             y: row * (brickConfig.height + brickConfig.padding) + brickConfig.offsetTop,
@@ -322,11 +505,48 @@
                             height: brickConfig.height,
                             color: design.colors[row % design.colors.length],
                             visible: true,
-                            points: (brickConfig.rows - row) * 10
+                            hits: hits,
+                            points: (brickConfig.rows - row) * 10,
+                            canFire: row >= 2, // 下半分のブロックが攻撃可能
+                            isBoss: false
                         });
                     }
                 }
             }
+            totalBricksAtStart = bricks.length;
+        }
+
+        // ボスブロック生成（ブロック60%破壊後に出現）
+        function spawnBoss() {
+            if (bossSpawned) return;
+            const design = levelDesigns[gameState.level] || levelDesigns[1];
+            if (Math.random() > (design.bossChance || 0)) return;
+            bossSpawned = true;
+
+            bossBlock = {
+                x: canvas.width / 2 - 80,
+                y: 30,
+                width: 160,
+                height: 40,
+                color: '#FF0000',
+                visible: true,
+                hits: 10 + gameState.level * 5,
+                maxHits: 10 + gameState.level * 5,
+                points: 500,
+                isBoss: true,
+                canFire: true,
+                fireTimer: 0,
+                fireInterval: 60, // frames between boss shots
+                moveDir: 1,
+                moveSpeed: 1 + gameState.level * 0.3,
+                attackPattern: 0 // alternates attack patterns
+            };
+            bricks.push(bossBlock);
+            
+            // ボス出現演出
+            screenShake.intensity = 15;
+            screenShake.duration = 30;
+            playSpecialSound();
         }
 
         // パドルを描画
@@ -357,13 +577,19 @@
             ctx.shadowBlur = 0;
         }
 
-        // ブロックを描画
+        // ブロックを描画（HP 表示）
         function drawBricks() {
             bricks.forEach(brick => {
                 if (brick.visible) {
-                    ctx.fillStyle = brick.color;
+                    // tint color slightly darker when hits > 1
+                    const base = brick.color;
+                    let fillColor = base;
+                    if (brick.hits && brick.hits === 2) fillColor = shadeColor(base, -8);
+                    if (brick.hits && brick.hits >= 3) fillColor = shadeColor(base, -18);
+
+                    ctx.fillStyle = fillColor;
                     ctx.shadowBlur = 5;
-                    ctx.shadowColor = brick.color;
+                    ctx.shadowColor = fillColor;
                     ctx.fillRect(brick.x, brick.y, brick.width, brick.height);
                     
                     // ハイライト効果
@@ -372,9 +598,32 @@
                     gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
                     ctx.fillStyle = gradient;
                     ctx.fillRect(brick.x, brick.y, brick.width, brick.height / 2);
+
+                    // HP 表示（2 以上のみ）
+                    if (brick.hits && brick.hits > 1) {
+                        ctx.fillStyle = '#ffffff';
+                        ctx.font = 'bold 14px sans-serif';
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'middle';
+                        ctx.fillText(brick.hits, brick.x + brick.width / 2, brick.y + brick.height / 2);
+                    }
+
                     ctx.shadowBlur = 0;
                 }
             });
+        }
+
+        // utility: darken / lighten hex color by percent
+        function shadeColor(hex, percent) {
+            // hex like #RRGGBB
+            const num = parseInt(hex.slice(1), 16);
+            let r = (num >> 16) + percent;
+            let g = ((num >> 8) & 0x00FF) + percent;
+            let b = (num & 0x0000FF) + percent;
+            r = Math.max(0, Math.min(255, r));
+            g = Math.max(0, Math.min(255, g));
+            b = Math.max(0, Math.min(255, b));
+            return '#' + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
         }
 
         // 背景を描画
@@ -435,26 +684,66 @@
                         ball.y - ball.radius < brick.y + brick.height) {
                         
                         ball.dy = -ball.dy;
-                        brick.visible = false;
-                        gameState.score += brick.points;
-                        updateScore();
-                        playBrickSound();
-                        
-                        // パーティクル効果
-                        createParticles(brick.x + brick.width / 2, brick.y + brick.height / 2, brick.color);
+                        const multiplier = getComboMultiplier();
+                        if (typeof brick.hits === 'number' && brick.hits > 1) {
+                            brick.hits -= 1;
+                            gameState.score += Math.ceil(brick.points / 3 * multiplier);
+                            addCombo(brick.x + brick.width / 2, brick.y);
+                            updateScore();
+                            playBrickSound();
+                            createParticles(brick.x + brick.width / 2, brick.y + brick.height / 2, brick.color);
+                        } else {
+                            brick.visible = false;
+                            gameState.score += Math.floor(brick.points * multiplier);
+                            // SP ゲイン
+                            sp.current = Math.min(sp.max, sp.current + sp.gain);
+                            addCombo(brick.x + brick.width / 2, brick.y);
+                            updateScore();
+                            playBrickSound();
+                            createParticles(brick.x + brick.width / 2, brick.y + brick.height / 2, brick.color);
+
+                            if (powerupsManager) {
+                                const bx = brick.x + brick.width / 2 - 12;
+                                const by = brick.y + brick.height / 2 - 12;
+                                const spawned = powerupsManager.spawn(bx, by);
+                                if (spawned) console.log('spawned powerup:', spawned.type);
+                            }
+
+                            // ボス出現判定: 60%破壊で出現
+                            const destroyed = bricks.filter(b => !b.visible).length;
+                            if (!bossSpawned && totalBricksAtStart > 0 && destroyed / totalBricksAtStart >= 0.6) {
+                                spawnBoss();
+                            }
+                        }
                     }
                 }
             });
 
             // ボールが下に落ちた
             if (ball.y + ball.radius > canvas.height) {
-                gameState.lives--;
-                updateLives();
-                
-                if (gameState.lives <= 0) {
-                    gameOver();
+                // バリアチェック
+                if (barrier && barrier.hp > 0) {
+                    ball.dy = -Math.abs(ball.dy);
+                    ball.y = barrier.y - ball.radius - 10;
+                    barrier.hp--;
+                    playBarrierSound();
+                    createParticles(ball.x, barrier.y, '#00ffc8');
+                } else if (extraBalls.length > 0) {
+                    const nb = extraBalls.pop();
+                    ball.x = nb.x;
+                    ball.y = nb.y;
+                    ball.dx = nb.dx;
+                    ball.dy = nb.dy;
+                    console.log('Promoted extra ball to main ball, remaining extraBalls=', extraBalls.length);
                 } else {
-                    resetBall();
+                    gameState.lives--;
+                    updateLives();
+                    
+                    if (gameState.lives <= 0) {
+                        gameOver();
+                    } else {
+                        resetBall();
+                    }
                 }
             }
         }
@@ -526,15 +815,745 @@
             }
         }
 
-        // パドルを移動
+        // 追加: extraBalls の移動
+        function moveExtraBalls() {
+            extraBalls.forEach(b => {
+                b.x += b.dx;
+                b.y += b.dy;
+            });
+        }
+
+        // 追加: bullets の移動
+        function updateBullets() {
+            for (let i = bullets.length - 1; i >= 0; i--) {
+                bullets[i].y += bullets[i].dy;
+                // remove if off top
+                if (bullets[i].y + (bullets[i].radius || 4) < 0) bullets.splice(i, 1);
+            }
+        }
+
+        // 追加: bullets を描画
+        function drawBullets() {
+            bullets.forEach(b => {
+                ctx.fillStyle = '#fff';
+                ctx.fillRect(b.x - (b.width || 4) / 2, b.y - (b.height || 8), b.width || 4, b.height || 8);
+            });
+        }
+
+        // 追加: bullets とブロックの衝突
+        function detectBulletCollision() {
+            for (let i = bullets.length - 1; i >= 0; i--) {
+                const b = bullets[i];
+                for (let j = 0; j < bricks.length; j++) {
+                    const brick = bricks[j];
+                    if (!brick.visible) continue;
+                    if (b.x > brick.x && b.x < brick.x + brick.width && b.y > brick.y && b.y < brick.y + brick.height) {
+                        const multiplier = getComboMultiplier();
+                        if (typeof brick.hits === 'number' && brick.hits > 1) {
+                            brick.hits -= 1;
+                            bullets.splice(i, 1);
+                            gameState.score += Math.ceil(brick.points / 3 * multiplier);
+                            addCombo(brick.x + brick.width / 2, brick.y);
+                            updateScore();
+                            playBrickSound();
+                            createParticles(brick.x + brick.width / 2, brick.y + brick.height / 2, brick.color);
+                        } else {
+                            bricks[j].visible = false;
+                            bullets.splice(i, 1);
+                            gameState.score += Math.floor(brick.points * multiplier);
+                            sp.current = Math.min(sp.max, sp.current + sp.gain);
+                            addCombo(brick.x + brick.width / 2, brick.y);
+                            updateScore();
+                            playBrickSound();
+                            createParticles(brick.x + brick.width / 2, brick.y + brick.height / 2, brick.color);
+                            if (powerupsManager) {
+                                const bx = brick.x + brick.width / 2 - 12;
+                                const by = brick.y + brick.height / 2 - 12;
+                                powerupsManager.spawn(bx, by);
+                            }
+                            // ボス出現判定
+                            const destroyed = bricks.filter(b2 => !b2.visible).length;
+                            if (!bossSpawned && totalBricksAtStart > 0 && destroyed / totalBricksAtStart >= 0.6) {
+                                spawnBoss();
+                            }
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+
+        // 追加: 発砲関数（KeyZ）
+        function shootBullet() {
+            const now = Date.now();
+            if (!paddle.pistol) return;
+            if (now - lastShotTime < shootCooldown) return;
+            lastShotTime = now;
+            const bx = paddle.x + paddle.width / 2;
+            bullets.push({ x: bx, y: paddle.y - 2, dy: -8, width: 4, height: 8, radius: 2 });
+            // optional sound effect
+            playPaddleSound();
+        }
+
+        // 追加: extraBalls の描画
+        function drawExtraBalls() {
+            extraBalls.forEach(b => {
+                const gradient = ctx.createRadialGradient(b.x, b.y, 0, b.x, b.y, b.radius);
+                gradient.addColorStop(0, '#FFFFFF');
+                gradient.addColorStop(1, '#FFD700');
+                ctx.fillStyle = gradient;
+                ctx.shadowBlur = 12;
+                ctx.shadowColor = '#FFD700';
+                ctx.beginPath();
+                ctx.arc(b.x, b.y, b.radius, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.shadowBlur = 0;
+            });
+        }
+
+        // 追加: extraBalls の衝突判定（パドル・ブロック・壁）
+        function detectCollisionExtraBalls() {
+            for (let i = extraBalls.length - 1; i >= 0; i--) {
+                const b = extraBalls[i];
+                // 壁
+                if (b.x + b.radius > canvas.width || b.x - b.radius < 0) {
+                    b.dx = -b.dx; playWallSound();
+                }
+                if (b.y - b.radius < 0) {
+                    b.dy = -b.dy; playWallSound();
+                }
+                // パドル
+                if (b.y + b.radius > paddle.y && b.y - b.radius < paddle.y + paddle.height && b.x > paddle.x && b.x < paddle.x + paddle.width) {
+                    const hitPos = (b.x - paddle.x) / paddle.width;
+                    const angle = (hitPos - 0.5) * Math.PI * 0.6;
+                    const design = levelDesigns[gameState.level] || levelDesigns[1];
+                    const speed = design.ballSpeed;
+                    b.dx = Math.sin(angle) * speed;
+                    b.dy = -Math.abs(Math.cos(angle) * speed);
+                    playPaddleSound();
+                }
+                // ブロック
+                bricks.forEach(brick => {
+                    if (brick.visible) {
+                        if (b.x + b.radius > brick.x && b.x - b.radius < brick.x + brick.width && b.y + b.radius > brick.y && b.y - b.radius < brick.y + brick.height) {
+                            b.dy = -b.dy;
+                            const multiplier = getComboMultiplier();
+                            if (typeof brick.hits === 'number' && brick.hits > 1) {
+                                brick.hits -= 1;
+                                gameState.score += Math.ceil(brick.points / 3 * multiplier);
+                                addCombo(brick.x + brick.width / 2, brick.y);
+                                updateScore();
+                                playBrickSound();
+                                createParticles(brick.x + brick.width / 2, brick.y + brick.height / 2, brick.color);
+                            } else {
+                                brick.visible = false;
+                                gameState.score += Math.floor(brick.points * multiplier);
+                                sp.current = Math.min(sp.max, sp.current + sp.gain);
+                                addCombo(brick.x + brick.width / 2, brick.y);
+                                updateScore();
+                                playBrickSound();
+                                createParticles(brick.x + brick.width / 2, brick.y + brick.height / 2, brick.color);
+                                if (powerupsManager) {
+                                    const bx = brick.x + brick.width / 2 - 12;
+                                    const by = brick.y + brick.height / 2 - 12;
+                                    powerupsManager.spawn(bx, by);
+                                }
+                                // ボス出現判定
+                                const destroyed = bricks.filter(b2 => !b2.visible).length;
+                                if (!bossSpawned && totalBricksAtStart > 0 && destroyed / totalBricksAtStart >= 0.6) {
+                                    spawnBoss();
+                                }
+                            }
+                        }
+                    }
+                });
+                // バリアチェック
+                if (b.y + b.radius > canvas.height) {
+                    if (barrier && barrier.hp > 0) {
+                        b.dy = -Math.abs(b.dy);
+                        b.y = barrier.y - b.radius - 10;
+                        barrier.hp--;
+                        playBarrierSound();
+                    } else {
+                        extraBalls.splice(i, 1);
+                    }
+                }
+            }
+        }
+
+        // 追加: powerups を描画
+        function drawPowerups() {
+            if (!powerupsManager) return;
+            powerupsManager.active.forEach(pu => {
+                ctx.fillStyle = pu.type === 'multiball' ? '#FFD700' :
+                                  pu.type === 'speed' ? '#FF6B6B' :
+                                  pu.type === 'expand' ? '#6BCB77' : '#8E44AD';
+                ctx.fillRect(pu.x, pu.y, pu.width, pu.height);
+                ctx.fillStyle = '#fff';
+                ctx.font = '12px sans-serif';
+                const label = pu.type === 'multiball' ? 'M' : pu.type === 'speed' ? 'S' : pu.type === 'expand' ? 'E' : 'P';
+                ctx.fillText(label, pu.x + 6, pu.y + 16);
+            });
+        }
+
+        // ============================
+        // SP (必殺技ゲージ) 描画
+        // ============================
+        function drawSPBar() {
+            const barX = 10;
+            const barY = canvas.height - 14;
+            const barW = 200;
+            const barH = 10;
+            // 背景
+            ctx.fillStyle = 'rgba(0,0,0,0.5)';
+            ctx.fillRect(barX, barY, barW, barH);
+            // ゲージ
+            const ratio = sp.current / sp.max;
+            const grad = ctx.createLinearGradient(barX, barY, barX + barW * ratio, barY);
+            grad.addColorStop(0, '#ff6b6b');
+            grad.addColorStop(0.5, '#ffd700');
+            grad.addColorStop(1, '#00ff88');
+            ctx.fillStyle = grad;
+            ctx.fillRect(barX, barY, barW * ratio, barH);
+            // 枠
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(barX, barY, barW, barH);
+            // テキスト
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 10px sans-serif';
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('SP ' + Math.floor(sp.current) + '/' + sp.max, barX + barW + 5, barY + barH / 2);
+        }
+
+        // ============================
+        // コンボ描画
+        // ============================
+        function updateCombo() {
+            if (combo.timer > 0) {
+                combo.timer--;
+                if (combo.timer <= 0) {
+                    combo.count = 0;
+                    document.getElementById('combo').textContent = '0';
+                }
+            }
+            // フローティング表示
+            if (combo.display.alpha > 0) {
+                combo.display.alpha -= 0.02;
+                combo.display.y -= 0.5;
+            }
+        }
+
+        function drawCombo() {
+            if (combo.display.alpha > 0 && combo.count >= 2) {
+                ctx.save();
+                ctx.globalAlpha = combo.display.alpha;
+                ctx.fillStyle = combo.count >= 10 ? '#ff0000' : combo.count >= 5 ? '#ffd700' : '#00ffff';
+                ctx.font = 'bold ' + (20 + combo.count * 2) + 'px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(combo.display.text, combo.display.x, combo.display.y);
+                ctx.restore();
+            }
+        }
+
+        function addCombo(x, y) {
+            combo.count++;
+            combo.timer = combo.maxTimer;
+            document.getElementById('combo').textContent = combo.count;
+            if (combo.count >= 2) {
+                playComboSound(combo.count);
+                combo.display = {
+                    text: combo.count + ' COMBO!',
+                    alpha: 1.0,
+                    x: x,
+                    y: y - 20
+                };
+            }
+            // SP ボーナス
+            sp.current = Math.min(sp.max, sp.current + sp.comboGain * combo.count);
+        }
+
+        function getComboMultiplier() {
+            if (combo.count < 2) return 1;
+            if (combo.count < 5) return 1.5;
+            if (combo.count < 10) return 2;
+            if (combo.count < 20) return 3;
+            return 5;
+        }
+
+        // ============================
+        // 画面シェイク
+        // ============================
+        function applyScreenShake() {
+            if (screenShake.duration > 0) {
+                const dx = (Math.random() - 0.5) * screenShake.intensity;
+                const dy = (Math.random() - 0.5) * screenShake.intensity;
+                ctx.translate(dx, dy);
+                screenShake.duration--;
+                screenShake.intensity *= 0.9;
+            }
+        }
+
+        function resetScreenShake() {
+            ctx.setTransform(1, 0, 0, 1, 0, 0);
+        }
+
+        // ============================
+        // 必殺技 発動
+        // ============================
+
+        // [1] レーザービーム — パドル上から縦に太いビームを放射
+        function activateLaser() {
+            if (sp.current < 30) return;
+            sp.current -= 30;
+            playSpecialSound();
+            screenShake.intensity = 10;
+            screenShake.duration = 20;
+            activeLaser = {
+                x: paddle.x + paddle.width / 2 - 20,
+                width: 40,
+                timer: 45, // frames
+                alpha: 1.0
+            };
+        }
+
+        function updateLaser() {
+            if (!activeLaser) return;
+            activeLaser.timer--;
+            activeLaser.alpha = activeLaser.timer / 45;
+            // レーザー中心をパドルに追従
+            activeLaser.x = paddle.x + paddle.width / 2 - activeLaser.width / 2;
+            
+            // ブロック破壊判定
+            bricks.forEach(brick => {
+                if (!brick.visible) return;
+                const laserLeft = activeLaser.x;
+                const laserRight = activeLaser.x + activeLaser.width;
+                if (brick.x + brick.width > laserLeft && brick.x < laserRight) {
+                    if (typeof brick.hits === 'number' && brick.hits > 1) {
+                        brick.hits--;
+                        gameState.score += Math.ceil(brick.points / 3 * getComboMultiplier());
+                        addCombo(brick.x + brick.width / 2, brick.y);
+                    } else {
+                        brick.visible = false;
+                        gameState.score += Math.floor(brick.points * getComboMultiplier());
+                        addCombo(brick.x + brick.width / 2, brick.y);
+                        createParticles(brick.x + brick.width / 2, brick.y + brick.height / 2, brick.color);
+                    }
+                    updateScore();
+                }
+            });
+            
+            if (activeLaser.timer <= 0) activeLaser = null;
+        }
+
+        function drawLaser() {
+            if (!activeLaser) return;
+            ctx.save();
+            ctx.globalAlpha = activeLaser.alpha * 0.8;
+            // ビーム本体
+            const grad = ctx.createLinearGradient(activeLaser.x, 0, activeLaser.x + activeLaser.width, 0);
+            grad.addColorStop(0, 'rgba(255,100,100,0.3)');
+            grad.addColorStop(0.3, 'rgba(255,255,255,0.9)');
+            grad.addColorStop(0.5, '#ff4444');
+            grad.addColorStop(0.7, 'rgba(255,255,255,0.9)');
+            grad.addColorStop(1, 'rgba(255,100,100,0.3)');
+            ctx.fillStyle = grad;
+            ctx.fillRect(activeLaser.x - 10, 0, activeLaser.width + 20, paddle.y);
+            // コアビーム
+            ctx.globalAlpha = activeLaser.alpha;
+            ctx.fillStyle = '#fff';
+            ctx.fillRect(activeLaser.x + activeLaser.width / 2 - 3, 0, 6, paddle.y);
+            ctx.restore();
+        }
+
+        // [2] メテオ — 画面上から火の玉が降り注ぐ
+        function activateMeteor() {
+            if (sp.current < 50) return;
+            sp.current -= 50;
+            playMeteorSound();
+            screenShake.intensity = 20;
+            screenShake.duration = 40;
+            // 8個のメテオをランダムに生成
+            for (let i = 0; i < 8; i++) {
+                meteors.push({
+                    x: Math.random() * (canvas.width - 40) + 20,
+                    y: -20 - Math.random() * 100,
+                    vy: 4 + Math.random() * 3,
+                    radius: 12 + Math.random() * 8,
+                    exploded: false,
+                    trail: []
+                });
+            }
+        }
+
+        function updateMeteors() {
+            for (let i = meteors.length - 1; i >= 0; i--) {
+                const m = meteors[i];
+                // 軌跡
+                m.trail.push({ x: m.x, y: m.y, alpha: 0.8 });
+                if (m.trail.length > 8) m.trail.shift();
+                
+                m.y += m.vy;
+                m.vy += 0.1; // 加速
+                
+                // ブロックとの当たり判定
+                if (!m.exploded) {
+                    bricks.forEach(brick => {
+                        if (!brick.visible) return;
+                        if (m.x > brick.x && m.x < brick.x + brick.width &&
+                            m.y > brick.y && m.y < brick.y + brick.height) {
+                            m.exploded = true;
+                            // 爆発半径内の全ブロックにダメージ
+                            const blastRadius = m.radius * 3;
+                            bricks.forEach(b2 => {
+                                if (!b2.visible) return;
+                                const dx = (b2.x + b2.width / 2) - m.x;
+                                const dy = (b2.y + b2.height / 2) - m.y;
+                                if (Math.sqrt(dx * dx + dy * dy) < blastRadius) {
+                                    if (typeof b2.hits === 'number' && b2.hits > 1) {
+                                        b2.hits--;
+                                        gameState.score += Math.ceil(b2.points / 3 * getComboMultiplier());
+                                        addCombo(b2.x + b2.width / 2, b2.y);
+                                    } else {
+                                        b2.visible = false;
+                                        gameState.score += Math.floor(b2.points * getComboMultiplier());
+                                        addCombo(b2.x + b2.width / 2, b2.y);
+                                    }
+                                    createParticles(b2.x + b2.width / 2, b2.y + b2.height / 2, b2.color);
+                                }
+                            });
+                            // 爆発パーティクル
+                            for (let k = 0; k < 16; k++) {
+                                createParticles(m.x, m.y, '#FF4500');
+                            }
+                            screenShake.intensity = Math.max(screenShake.intensity, 8);
+                            screenShake.duration = Math.max(screenShake.duration, 10);
+                            playBrickSound();
+                            updateScore();
+                        }
+                    });
+                }
+                
+                // 画面外
+                if (m.y > canvas.height + 40 || m.exploded) {
+                    meteors.splice(i, 1);
+                }
+            }
+        }
+
+        function drawMeteors() {
+            meteors.forEach(m => {
+                // 軌跡
+                m.trail.forEach((t, idx) => {
+                    ctx.save();
+                    ctx.globalAlpha = t.alpha * (idx / m.trail.length) * 0.5;
+                    ctx.fillStyle = '#FF4500';
+                    ctx.beginPath();
+                    ctx.arc(t.x, t.y, m.radius * (idx / m.trail.length), 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.restore();
+                    t.alpha *= 0.9;
+                });
+                // メテオ本体
+                const grad = ctx.createRadialGradient(m.x, m.y, 0, m.x, m.y, m.radius);
+                grad.addColorStop(0, '#FFFFFF');
+                grad.addColorStop(0.3, '#FFD700');
+                grad.addColorStop(0.7, '#FF4500');
+                grad.addColorStop(1, 'rgba(255,69,0,0)');
+                ctx.fillStyle = grad;
+                ctx.beginPath();
+                ctx.arc(m.x, m.y, m.radius, 0, Math.PI * 2);
+                ctx.fill();
+            });
+        }
+
+        // [3] バリア — 画面下部にバリアを展開（ボール落下防止）
+        function activateBarrier() {
+            if (sp.current < 20) return;
+            sp.current -= 20;
+            playBarrierSound();
+            barrier = {
+                y: canvas.height - 5,
+                alpha: 1.0,
+                hp: 3, // 3回ボールを跳ね返す
+                timer: 600 // 10秒
+            };
+        }
+
+        function updateBarrier() {
+            if (!barrier) return;
+            barrier.timer--;
+            barrier.alpha = Math.min(1.0, barrier.timer / 60);
+            if (barrier.timer <= 0 || barrier.hp <= 0) {
+                barrier = null;
+            }
+        }
+
+        function drawBarrier() {
+            if (!barrier) return;
+            ctx.save();
+            ctx.globalAlpha = barrier.alpha * 0.7;
+            const grad = ctx.createLinearGradient(0, barrier.y - 10, 0, barrier.y + 5);
+            grad.addColorStop(0, 'rgba(0,255,200,0)');
+            grad.addColorStop(0.5, 'rgba(0,255,200,0.8)');
+            grad.addColorStop(1, 'rgba(0,255,200,0)');
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, barrier.y - 8, canvas.width, 16);
+            // HP 表示
+            ctx.globalAlpha = barrier.alpha;
+            ctx.fillStyle = '#00ffc8';
+            ctx.font = 'bold 11px sans-serif';
+            ctx.textAlign = 'right';
+            ctx.fillText('BARRIER x' + barrier.hp, canvas.width - 10, barrier.y - 12);
+            ctx.restore();
+        }
+
+        // ============================
+        // 敵弾システム
+        // ============================
+        function updateEnemyFire() {
+            if (!gameState.ballLaunched) return;
+            const design = levelDesigns[gameState.level] || levelDesigns[1];
+            const interval = Math.floor(ENEMY_FIRE_INTERVAL_BASE / Math.max(0.1, design.enemyFireRate || 0.3));
+            enemyFireTimer++;
+            
+            // ボスの攻撃
+            if (bossBlock && bossBlock.visible) {
+                bossBlock.fireTimer++;
+                // ボス移動
+                bossBlock.x += bossBlock.moveSpeed * bossBlock.moveDir;
+                if (bossBlock.x <= 10 || bossBlock.x + bossBlock.width >= canvas.width - 10) {
+                    bossBlock.moveDir *= -1;
+                }
+                // ボス攻撃
+                if (bossBlock.fireTimer >= bossBlock.fireInterval) {
+                    bossBlock.fireTimer = 0;
+                    bossBlock.attackPattern = (bossBlock.attackPattern + 1) % 3;
+                    
+                    if (bossBlock.attackPattern === 0) {
+                        // 直線弾
+                        enemyBullets.push({
+                            x: bossBlock.x + bossBlock.width / 2,
+                            y: bossBlock.y + bossBlock.height,
+                            dx: 0,
+                            dy: 3 + gameState.level,
+                            radius: 6,
+                            type: 'boss',
+                            color: '#ff0000'
+                        });
+                    } else if (bossBlock.attackPattern === 1) {
+                        // 3-way弾
+                        for (let a = -1; a <= 1; a++) {
+                            enemyBullets.push({
+                                x: bossBlock.x + bossBlock.width / 2,
+                                y: bossBlock.y + bossBlock.height,
+                                dx: a * 2,
+                                dy: 3 + gameState.level * 0.5,
+                                radius: 5,
+                                type: 'boss',
+                                color: '#ff4444'
+                            });
+                        }
+                    } else {
+                        // 狙い撃ち（パドルに向かって飛ぶ）
+                        const tx = paddle.x + paddle.width / 2;
+                        const ty = paddle.y;
+                        const bx = bossBlock.x + bossBlock.width / 2;
+                        const by = bossBlock.y + bossBlock.height;
+                        const angle = Math.atan2(ty - by, tx - bx);
+                        const spd = 4 + gameState.level * 0.5;
+                        enemyBullets.push({
+                            x: bx, y: by,
+                            dx: Math.cos(angle) * spd,
+                            dy: Math.sin(angle) * spd,
+                            radius: 7,
+                            type: 'boss_aimed',
+                            color: '#ff00ff'
+                        });
+                    }
+                    playEnemyFireSound();
+                }
+            }
+            
+            // 通常ブロックからの攻撃
+            if (enemyFireTimer >= interval) {
+                enemyFireTimer = 0;
+                const firingBricks = bricks.filter(b => b.visible && b.canFire && !b.isBoss);
+                if (firingBricks.length > 0) {
+                    const shooter = firingBricks[Math.floor(Math.random() * firingBricks.length)];
+                    // 警告表示
+                    warningBricks.push({ brick: shooter, timer: 30 });
+                }
+            }
+            
+            // 警告からの発射
+            for (let i = warningBricks.length - 1; i >= 0; i--) {
+                warningBricks[i].timer--;
+                if (warningBricks[i].timer <= 0) {
+                    const brick = warningBricks[i].brick;
+                    if (brick.visible) {
+                        enemyBullets.push({
+                            x: brick.x + brick.width / 2,
+                            y: brick.y + brick.height,
+                            dx: (Math.random() - 0.5) * 1.5,
+                            dy: 2 + gameState.level * 0.5,
+                            radius: 4,
+                            type: 'normal',
+                            color: '#ffaa00'
+                        });
+                        playEnemyFireSound();
+                    }
+                    warningBricks.splice(i, 1);
+                }
+            }
+        }
+
+        function updateEnemyBullets() {
+            for (let i = enemyBullets.length - 1; i >= 0; i--) {
+                const eb = enemyBullets[i];
+                eb.x += (eb.dx || 0);
+                eb.y += eb.dy;
+                
+                // バリアとの衝突
+                if (barrier && eb.y + eb.radius > barrier.y - 8) {
+                    enemyBullets.splice(i, 1);
+                    barrier.hp--;
+                    playHitSound();
+                    createParticles(eb.x, barrier.y, '#00ffc8');
+                    continue;
+                }
+                
+                // パドルとの衝突 → ダメージ
+                if (eb.x > paddle.x && eb.x < paddle.x + paddle.width &&
+                    eb.y + eb.radius > paddle.y && eb.y < paddle.y + paddle.height) {
+                    enemyBullets.splice(i, 1);
+                    gameState.lives--;
+                    updateLives();
+                    screenShake.intensity = 12;
+                    screenShake.duration = 15;
+                    createParticles(eb.x, paddle.y, '#ff0000');
+                    playHitSound();
+                    if (gameState.lives <= 0) {
+                        gameOver();
+                        return;
+                    }
+                    continue;
+                }
+                
+                // 画面外
+                if (eb.y > canvas.height + 20 || eb.x < -20 || eb.x > canvas.width + 20) {
+                    enemyBullets.splice(i, 1);
+                }
+            }
+        }
+
+        function drawEnemyBullets() {
+            enemyBullets.forEach(eb => {
+                ctx.save();
+                const grad = ctx.createRadialGradient(eb.x, eb.y, 0, eb.x, eb.y, eb.radius);
+                grad.addColorStop(0, '#fff');
+                grad.addColorStop(0.5, eb.color || '#ffaa00');
+                grad.addColorStop(1, 'rgba(255,0,0,0)');
+                ctx.fillStyle = grad;
+                ctx.beginPath();
+                ctx.arc(eb.x, eb.y, eb.radius * 1.5, 0, Math.PI * 2);
+                ctx.fill();
+                // コア
+                ctx.fillStyle = '#fff';
+                ctx.beginPath();
+                ctx.arc(eb.x, eb.y, eb.radius * 0.4, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            });
+        }
+
+        // 警告表示描画
+        function drawWarnings() {
+            warningBricks.forEach(w => {
+                if (!w.brick.visible) return;
+                ctx.save();
+                ctx.globalAlpha = 0.5 + 0.5 * Math.sin(w.timer * 0.5);
+                ctx.strokeStyle = '#ff0000';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(w.brick.x - 2, w.brick.y - 2, w.brick.width + 4, w.brick.height + 4);
+                // 「!」マーク
+                ctx.fillStyle = '#ff0000';
+                ctx.font = 'bold 16px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText('!', w.brick.x + w.brick.width / 2, w.brick.y + w.brick.height + 16);
+                ctx.restore();
+            });
+        }
+
+        // ボスブロック描画
+        function drawBoss() {
+            if (!bossBlock || !bossBlock.visible) return;
+            ctx.save();
+            // 本体
+            const hpRatio = bossBlock.hits / bossBlock.maxHits;
+            const grad = ctx.createLinearGradient(bossBlock.x, bossBlock.y, bossBlock.x + bossBlock.width, bossBlock.y + bossBlock.height);
+            grad.addColorStop(0, hpRatio > 0.5 ? '#aa0000' : '#ff0000');
+            grad.addColorStop(0.5, '#ff4444');
+            grad.addColorStop(1, hpRatio > 0.5 ? '#aa0000' : '#ff0000');
+            ctx.fillStyle = grad;
+            ctx.shadowBlur = 15;
+            ctx.shadowColor = '#ff0000';
+            ctx.fillRect(bossBlock.x, bossBlock.y, bossBlock.width, bossBlock.height);
+            // 枠
+            ctx.strokeStyle = '#ffd700';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(bossBlock.x, bossBlock.y, bossBlock.width, bossBlock.height);
+            // HPバー
+            const hpBarW = bossBlock.width - 10;
+            ctx.fillStyle = 'rgba(0,0,0,0.5)';
+            ctx.fillRect(bossBlock.x + 5, bossBlock.y - 10, hpBarW, 6);
+            ctx.fillStyle = hpRatio > 0.5 ? '#00ff00' : hpRatio > 0.2 ? '#ffaa00' : '#ff0000';
+            ctx.fillRect(bossBlock.x + 5, bossBlock.y - 10, hpBarW * hpRatio, 6);
+            // BOSS テキスト
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 16px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('BOSS HP:' + bossBlock.hits, bossBlock.x + bossBlock.width / 2, bossBlock.y + bossBlock.height / 2);
+            ctx.shadowBlur = 0;
+            ctx.restore();
+        }
+
+        // パドルを移動（加速度ベースで自然に動く）
         function movePaddle() {
-            paddle.x += paddle.dx;
+            const base = paddle.baseMaxSpeed || 8;
+            const maxSpeed = paddle.speed || base;
+            const maxAccel = paddle.accel || 1.6;
+
+            // Decide desired velocity from input
+            let desiredV = 0;
+            if (isLeftPressed) desiredV = -maxSpeed;
+            else if (isRightPressed) desiredV = maxSpeed;
+            else if (mouseTargetX !== null) {
+                // Mouse: set desired velocity proportional to distance to target
+                const dist = (mouseTargetX - paddle.x);
+                desiredV = Math.max(-maxSpeed, Math.min(maxSpeed, dist * 0.08 * (maxSpeed / base)));
+            }
+
+            // accelerate towards desired velocity
+            const dv = desiredV - paddle.vx;
+            const accel = Math.max(-maxAccel, Math.min(maxAccel, dv));
+            paddle.vx += accel;
+
+            // simple damping
+            paddle.vx *= 0.985;
+
+            // update position
+            paddle.x += paddle.vx;
 
             if (paddle.x < 0) {
-                paddle.x = 0;
+                paddle.x = 0; paddle.vx = 0;
             }
             if (paddle.x + paddle.width > canvas.width) {
-                paddle.x = canvas.width - paddle.width;
+                paddle.x = canvas.width - paddle.width; paddle.vx = 0;
             }
         }
 
@@ -559,8 +1578,17 @@
             if (allBricksDestroyed && gameState.isPlaying) {
                 gameState.isPlaying = false;
                 playLevelCompleteSound();
-                document.getElementById('levelScore').textContent = gameState.score;
+                // ボーナス: 残りライフ × 100
+                const lifeBonus = gameState.lives * 100;
+                gameState.score += lifeBonus;
+                updateScore();
+                document.getElementById('levelScore').textContent = gameState.score + ' (ライフボーナス +' + lifeBonus + ')';
                 document.getElementById('levelCompleteMessage').classList.add('show');
+                // 必殺技・弾のクリア
+                activeLaser = null;
+                meteors = [];
+                enemyBullets = [];
+                warningBricks = [];
             }
         }
 
@@ -576,10 +1604,14 @@
         function nextLevel() {
             document.getElementById('levelCompleteMessage').classList.remove('show');
             gameState.level++;
-            if (gameState.level > 3) {
+            if (gameState.level > 10) {
+                // 全レベルクリア！
+                alert('🎉 おめでとう！全レベルクリア！最終スコア: ' + gameState.score);
                 gameState.level = 1;
             }
             updateLevel();
+            // レベル切替時、設定に応じてパドルを中央に戻すか決定
+            if (centerPaddleOnStart) paddle.x = canvas.width / 2 - paddle.width / 2;
             startGame();
         }
 
@@ -604,6 +1636,20 @@
             document.getElementById('levelCompleteMessage').classList.remove('show');
             gameState.score = 0;
             gameState.lives = 3;
+            sp.current = 0;
+            combo.count = 0;
+            combo.timer = 0;
+            combo.display.alpha = 0;
+            document.getElementById('combo').textContent = '0';
+            activeLaser = null;
+            meteors = [];
+            barrier = null;
+            enemyBullets = [];
+            warningBricks = [];
+            extraBalls = [];
+            bullets = [];
+            screenShake.intensity = 0;
+            screenShake.duration = 0;
             updateScore();
             updateLives();
             startGame();
@@ -617,7 +1663,8 @@
             gameState.isPlaying = true;
             createBricks();
             resetBall();
-            paddle.x = canvas.width / 2 - paddle.width / 2;
+            // 中央へ戻す設定が有効なら中央にする
+            if (centerPaddleOnStart) paddle.x = canvas.width / 2 - paddle.width / 2;
             gameLoop();
         }
 
@@ -628,35 +1675,91 @@
                 return;
             }
 
+            // 画面シェイク適用
+            resetScreenShake();
+            applyScreenShake();
+
             drawBackground();
             drawBricks();
+            drawBoss();
             drawPaddle();
             drawBall();
+            drawExtraBalls();
+            drawBullets();
+            drawPowerups();
+            drawEnemyBullets();
+            drawWarnings();
+            drawLaser();
+            drawMeteors();
+            drawBarrier();
+            drawSPBar();
+            drawCombo();
             updateParticles();
             
             movePaddle();
             moveBall();
+            moveExtraBalls();
+            updateBullets();
+            updateCombo();
+
+            // 必殺技更新
+            updateLaser();
+            updateMeteors();
+            updateBarrier();
+
+            // 敵攻撃
+            updateEnemyFire();
+            updateEnemyBullets();
+
             detectCollision();
+            detectBulletCollision();
+            detectCollisionExtraBalls();
+
+            // powerups 更新（落下・取得チェック）
+            if (powerupsManager) powerupsManager.update(gameProxy);
+
             checkLevelComplete();
 
             gameState.animationId = requestAnimationFrame(gameLoop);
         }
 
         // キーボード操作
+        // key state flags for immediate reaction to speed changes
+        let isLeftPressed = false;
+        let isRightPressed = false;
+
         document.addEventListener('keydown', (e) => {
             if (e.key === 'ArrowLeft' || e.key === 'Left') {
+                isLeftPressed = true;
+                // set dx for immediate response
                 paddle.dx = -paddle.speed;
             } else if (e.key === 'ArrowRight' || e.key === 'Right') {
+                isRightPressed = true;
                 paddle.dx = paddle.speed;
             } else if (e.key === ' ' || e.key === 'Spacebar') {
                 e.preventDefault();
                 launchBall();
+            } else if (e.key === 'z' || e.key === 'Z') {
+                // fire pistol bullets when available
+                shootBullet();
+            } else if (e.key === '1') {
+                // 必殺技: レーザービーム (30 SP)
+                activateLaser();
+            } else if (e.key === '2') {
+                // 必殺技: メテオ (50 SP)
+                activateMeteor();
+            } else if (e.key === '3') {
+                // 必殺技: バリア (20 SP)
+                activateBarrier();
             }
         });
 
         document.addEventListener('keyup', (e) => {
-            if (e.key === 'ArrowLeft' || e.key === 'Left' || 
-                e.key === 'ArrowRight' || e.key === 'Right') {
+            if (e.key === 'ArrowLeft' || e.key === 'Left') {
+                isLeftPressed = false;
+                paddle.dx = 0;
+            } else if (e.key === 'ArrowRight' || e.key === 'Right') {
+                isRightPressed = false;
                 paddle.dx = 0;
             }
         });
@@ -665,37 +1768,22 @@
         let canvasRect = canvas.getBoundingClientRect();
         let canvasScaleX = canvas.width / canvasRect.width;
 
-        // マウス操作
-        canvas.addEventListener('mousemove', (e) => {
-            const mouseX = (e.clientX - canvasRect.left) * canvasScaleX;
-            paddle.x = mouseX - paddle.width / 2;
-
-            if (paddle.x < 0) paddle.x = 0;
-            if (paddle.x + paddle.width > canvas.width) {
-                paddle.x = canvas.width - paddle.width;
-            }
-        });
-
-        canvas.addEventListener('click', () => {
-            launchBall();
-        });
+        // マウス操作は無効化（キーボードのみで操作）
+        // mouseTargetX を残すが更新は行わない（常に null）
+        let mouseTargetX = null;
+        // Clicks no longer launch the ball to enforce keyboard-only control
+        // canvas.addEventListener('click', () => { launchBall(); });
+        // Note: use Space key to launch, Arrow keys to move
 
         // タッチ操作（スマートフォン対応）
         canvas.addEventListener('touchmove', (e) => {
+            // touch control disabled for keyboard-only mode
             e.preventDefault();
-            const touch = e.touches[0];
-            const touchX = (touch.clientX - canvasRect.left) * canvasScaleX;
-            paddle.x = touchX - paddle.width / 2;
-
-            if (paddle.x < 0) paddle.x = 0;
-            if (paddle.x + paddle.width > canvas.width) {
-                paddle.x = canvas.width - paddle.width;
-            }
         });
 
         canvas.addEventListener('touchstart', (e) => {
+            // do not launch ball on touch; use Space key instead
             e.preventDefault();
-            launchBall();
         });
 
         // レスポンシブ対応

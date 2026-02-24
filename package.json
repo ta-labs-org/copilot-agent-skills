@@ -1,0 +1,23 @@
+{
+  "name": "copilot-agent-janken",
+  "version": "1.0.0",
+  "description": "Simple janken (rock-paper-scissors) CLI for tests",
+  "main": "src/cli.js",
+  "bin": {
+    "janken": "bin/janken.js"
+  },
+  "scripts": {
+    "start": "node ./bin/janken.js",
+    "test": "jest tests",
+    "test:puppeteer": "node test-puppeteer.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "puppeteer": "^21.0.0"
+  },
+  "devDependencies": {
+    "jest": "^29.0.0"
+  }
+}
