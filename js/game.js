@@ -112,16 +112,18 @@ class Ball {
                 const overlapX = Math.max(0, this.radius - distLeft, this.radius - distRight);
                 const overlapY = Math.max(0, this.radius - distTop, this.radius - distBottom);
                 if (overlapX > 0 && overlapY > 0) {
-                    // 角侵入の場合、両方向補正
-                    if (ballCenterX < blockLeft) this.x -= overlapX;
-                    else if (ballCenterX > blockRight) this.x += overlapX;
-                    if (ballCenterY < blockTop) this.y -= overlapY;
-                    else if (ballCenterY > blockBottom) this.y += overlapY;
+                    // 角侵入の場合、両方向とも最近傍の辺へ補正
+                    if (distLeft <= distRight) this.x -= overlapX;
+                    else this.x += overlapX;
+                    if (distTop <= distBottom) this.y -= overlapY;
+                    else this.y += overlapY;
                 } else if (overlapX > 0) {
-                    if (ballCenterX < blockLeft) this.x -= overlapX;
+                    // X 方向のみ侵入: 左右どちらの辺が近いかで押し出し方向を決定
+                    if (distLeft <= distRight) this.x -= overlapX;
                     else this.x += overlapX;
                 } else if (overlapY > 0) {
-                    if (ballCenterY < blockTop) this.y -= overlapY;
+                    // Y 方向のみ侵入: 上下どちらの辺が近いかで押し出し方向を決定
+                    if (distTop <= distBottom) this.y -= overlapY;
                     else this.y += overlapY;
                 }
                 if (game && typeof game.onBlockDestroyed === 'function') {
