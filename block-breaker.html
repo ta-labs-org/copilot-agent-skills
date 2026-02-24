@@ -1751,17 +1751,6 @@
             } else if (e.key === '3') {
                 // 必殺技: バリア (20 SP)
                 activateBarrier();
-            } else if (e.key === 's' || e.key === 'S') {
-                // debug / manual apply speed powerup
-                if (powerupsManager && typeof powerupsManager.apply === 'function') {
-                    powerupsManager.apply('speed', gameProxy, { id: 9999 });
-                    console.log('Manual speed apply via S, paddle.speed=', paddle.speed);
-                } else {
-                    // fallback: temporary speed boost
-                    paddle.speed = (paddle.speed || 8) * 1.7;
-                    console.log('Manual speed fallback applied, paddle.speed=', paddle.speed);
-                    setTimeout(() => { paddle.speed = Math.round(paddle.speed / 1.7); console.log('Manual speed reverted, paddle.speed=', paddle.speed); }, 10000);
-                }
             }
         });
 
