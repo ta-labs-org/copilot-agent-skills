@@ -142,7 +142,7 @@ resource containerRegistry 'Microsoft.ContainerRegistry/registries@2023-07-01' =
   tags: tags
   sku: { name: 'Basic' }
   properties: {
-    adminUserEnabled: true  // Required for Container Apps pull
+    adminUserEnabled: false  // Use managed identity or service principal from Container Apps instead of admin user
   }
 }
 
