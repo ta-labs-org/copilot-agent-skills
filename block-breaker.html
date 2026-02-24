@@ -1775,13 +1775,6 @@
             }
         });
 
-        document.addEventListener('keyup', (e) => {
-            if (e.key === 'ArrowLeft' || e.key === 'Left' || 
-                e.key === 'ArrowRight' || e.key === 'Right') {
-                paddle.dx = 0;
-            }
-        });
-
         // キャッシュされたcanvasの境界情報
         let canvasRect = canvas.getBoundingClientRect();
         let canvasScaleX = canvas.width / canvasRect.width;
