@@ -1,0 +1,56 @@
+@{
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    ViewBag.Title = "Home";
+}
+
+<div class="px-4 py-5 my-5 text-center">
+    <h1 class="display-5 fw-bold">OracleWebApp</h1>
+    <div class="col-lg-6 mx-auto">
+        <p class="lead mb-4">
+            An ASP.NET MVC 5 application integrated with Oracle Database.
+            Manage <strong>Users</strong> and <strong>Products</strong> with full CRUD support,
+            optimistic concurrency control, and logical deletes.
+        </p>
+        <div class="d-grid gap-2 d-sm-flex justify-content-sm-center">
+            <a href="@Url.Action("Index", "Users")" class="btn btn-primary btn-lg px-4 gap-3">
+                Manage Users
+            </a>
+            <a href="@Url.Action("Index", "Products")" class="btn btn-outline-secondary btn-lg px-4">
+                Manage Products
+            </a>
+        </div>
+    </div>
+</div>
+
+<div class="container">
+    <div class="row g-4 py-5 row-cols-1 row-cols-lg-3">
+        <div class="col d-flex align-items-start">
+            <div>
+                <h3 class="fs-2">Oracle Integration</h3>
+                <p>
+                    Powered by <strong>ODP.NET Managed Driver</strong> and
+                    <strong>Entity Framework 6</strong> with Oracle-compatible
+                    UPPER_CASE column naming convention.
+                </p>
+            </div>
+        </div>
+        <div class="col d-flex align-items-start">
+            <div>
+                <h3 class="fs-2">Optimistic Concurrency</h3>
+                <p>
+                    RowVersion-based optimistic concurrency prevents lost-update conflicts.
+                    Conflicting fields are highlighted when concurrent edits are detected.
+                </p>
+            </div>
+        </div>
+        <div class="col d-flex align-items-start">
+            <div>
+                <h3 class="fs-2">Logical Delete</h3>
+                <p>
+                    Records are never physically deleted. Setting <code>IsDeleted = true</code>
+                    preserves audit history while hiding records from normal views.
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
