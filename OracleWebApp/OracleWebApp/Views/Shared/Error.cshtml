@@ -1,0 +1,25 @@
+@model System.Web.Mvc.HandleErrorInfo
+@{
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    ViewBag.Title = "Error";
+}
+
+<div class="container mt-5">
+    <div class="alert alert-danger" role="alert">
+        <h2 class="alert-heading">
+            <i class="bi bi-exclamation-triangle-fill"></i> An Error Occurred
+        </h2>
+        <hr />
+        <p>An unexpected error occurred while processing your request. Please try again later.</p>
+        @if (Model != null && HttpContext.Current != null && HttpContext.Current.IsDebuggingEnabled)
+        {
+            <hr />
+            <p><strong>Controller:</strong> @Model.ControllerName</p>
+            <p><strong>Action:</strong> @Model.ActionName</p>
+            <p><strong>Exception:</strong> @Model.Exception?.Message</p>
+        }
+    </div>
+    <a href="@Url.Action("Index", "Home")" class="btn btn-primary">
+        &larr; Return to Home
+    </a>
+</div>

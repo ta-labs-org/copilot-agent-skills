@@ -1,0 +1,46 @@
+@model OracleWebApp.Models.Product
+@{
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    ViewBag.Title = "Delete Product";
+}
+
+<div class="container mt-4">
+    <h2>Delete Product</h2>
+    <hr />
+
+    <div class="alert alert-warning">
+        <strong>Warning:</strong> Are you sure you want to delete this product?
+        This action will mark the product as deleted (logical delete).
+    </div>
+
+    <dl class="row">
+        <dt class="col-sm-3">Product ID</dt>
+        <dd class="col-sm-9">@Model.ProductId</dd>
+
+        <dt class="col-sm-3">Product Name</dt>
+        <dd class="col-sm-9">@Model.ProductName</dd>
+
+        <dt class="col-sm-3">Description</dt>
+        <dd class="col-sm-9">@(string.IsNullOrEmpty(Model.Description) ? "(none)" : Model.Description)</dd>
+
+        <dt class="col-sm-3">Price</dt>
+        <dd class="col-sm-9">@Model.Price.ToString("C")</dd>
+
+        <dt class="col-sm-3">Stock</dt>
+        <dd class="col-sm-9">@Model.Stock</dd>
+
+        <dt class="col-sm-3">Created At</dt>
+        <dd class="col-sm-9">@Model.CreatedAt.ToString("yyyy-MM-dd HH:mm:ss")</dd>
+    </dl>
+
+    @using (Html.BeginForm("Delete", "Products", FormMethod.Post))
+    {
+        @Html.AntiForgeryToken()
+        @Html.Hidden("id", Model.ProductId)
+
+        <div class="d-flex gap-2 mt-4">
+            <button type="submit" class="btn btn-danger">Yes, Delete</button>
+            <a href="@Url.Action("Index")" class="btn btn-secondary">Cancel</a>
+        </div>
+    }
+</div>
